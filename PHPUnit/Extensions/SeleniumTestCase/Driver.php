@@ -858,60 +858,87 @@ class PHPUnit_Extensions_SeleniumTestCase_Driver
      */
     protected function doCommand($command, array $arguments = array())
     {
-        if (!ini_get('allow_url_fopen')) {
+        if (!ini_get('allow_url_fopen') && !extension_loaded('curl')) {
             throw new PHPUnit_Framework_Exception(
-              'Could not connect to the Selenium RC server because allow_url_fopen is disabled.'
+              'Could not connect to the Selenium RC server because cURL extension is unavailable and allow_url_fopen is disabled.'
             );
         }
 
         $url = sprintf(
-          'http://%s:%s/selenium-server/driver/?cmd=%s',
+          'http://%s:%s/selenium-server/driver/',
           $this->host,
-          $this->port,
-          urlencode($command)
+          $this->port
         );
 
+        $parameters = sprintf('cmd=%s', urlencode($command));
+        
         $numArguments = count($arguments);
 
         for ($i = 0; $i < $numArguments; $i++) {
             $argNum = strval($i + 1);
-            $url .= sprintf('&%s=%s', $argNum, urlencode(trim($arguments[$i])));
+            $parameters .= sprintf('&%s=%s', $argNum, urlencode(trim($arguments[$i])));
         }
 
         if (isset($this->sessionId)) {
-            $url .= sprintf('&%s=%s', 'sessionId', $this->sessionId);
+            $parameters .= sprintf('&%s=%s', 'sessionId', $this->sessionId);
         }
 
         $this->commands[] = sprintf('%s(%s)', $command, join(', ', $arguments));
 
-        $context = stream_context_create(
-          array(
-            'http' => array(
-              'timeout' => $this->httpTimeout
-            )
-          )
-        );
+        if (extension_loaded('curl'))
+        {
+            $handle = curl_init($url);
+            curl_setopt ($handle, CURLOPT_POST, true) ;
+            curl_setopt ($handle, CURLOPT_POSTFIELDS, $parameters) ;
+            curl_setopt ($handle, CURLOPT_RETURNTRANSFER, true) ;
 
-        $handle = @fopen($url, 'r', FALSE, $context);
+            // This emulates the HTTP stream timeout: If download speed is below 
+            // 10 MByte/s for more than httpTimeout seconds, abort
+            curl_setopt ($handle, CURLOPT_CONNECTTIMEOUT, $this->httpTimeout);
+            curl_setopt ($handle, CURLOPT_LOW_SPEED_LIMIT, 10485760);
+            curl_setopt ($handle, CURLOPT_LOW_SPEED_TIME, $this->httpTimeout);
+            $response = curl_exec($handle);
+            curl_close($handle);
 
-        if (!$handle) {
-            throw new PHPUnit_Framework_Exception(
-              'Could not connect to the Selenium RC server.'
+            if (false === $response) {
+                throw new PHPUnit_Framework_Exception(
+                  'Could not connect to the Selenium RC server.'
+                );
+            }
+        }
+        else
+        {
+            $context = stream_context_create(
+              array(
+                'http' => array(
+                  'method'  => 'POST',
+                  'content' => $parameters,
+                  'timeout' => $this->httpTimeout
+                )
+              )
             );
+
+            $handle = @fopen($url, 'r', FALSE, $context);
+
+            if (!$handle) {
+                throw new PHPUnit_Framework_Exception(
+                  'Could not connect to the Selenium RC server.'
+                );
+            }
+
+            stream_set_blocking($handle, 1);
+            stream_set_timeout($handle, $this->httpTimeout);
+
+            $info     = stream_get_meta_data($handle);
+            $response = '';
+
+            while (!$info['eof'] && !$info['timed_out']) {
+                $response .= fgets($handle, 4096);
+                $info = stream_get_meta_data($handle);
+            }
+
+            fclose($handle);
         }
-
-        stream_set_blocking($handle, 1);
-        stream_set_timeout($handle, 0, $this->httpTimeout * 1000);
-
-        $info     = stream_get_meta_data($handle);
-        $response = '';
-
-        while (!$info['eof'] && !$info['timed_out']) {
-            $response .= fgets($handle, 4096);
-            $info = stream_get_meta_data($handle);
-        }
-
-        fclose($handle);
 
         if (!preg_match('/^OK/', $response)) {
             $this->stop();
