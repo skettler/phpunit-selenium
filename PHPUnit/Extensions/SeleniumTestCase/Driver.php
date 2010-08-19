@@ -886,23 +886,27 @@ class PHPUnit_Extensions_SeleniumTestCase_Driver
         if (extension_loaded('curl'))
         {
             $handle = curl_init($url);
-            curl_setopt ($handle, CURLOPT_POST, true) ;
-            curl_setopt ($handle, CURLOPT_POSTFIELDS, $parameters) ;
-            curl_setopt ($handle, CURLOPT_RETURNTRANSFER, true) ;
+            curl_setopt($handle, CURLOPT_POST, true) ;
+            curl_setopt($handle, CURLOPT_POSTFIELDS, $parameters) ;
+            curl_setopt($handle, CURLOPT_RETURNTRANSFER, true) ;
 
             // This emulates the HTTP stream timeout: If download speed is below 
             // 10 MByte/s for more than httpTimeout seconds, abort
-            curl_setopt ($handle, CURLOPT_CONNECTTIMEOUT, $this->httpTimeout);
-            curl_setopt ($handle, CURLOPT_LOW_SPEED_LIMIT, 10485760);
-            curl_setopt ($handle, CURLOPT_LOW_SPEED_TIME, $this->httpTimeout);
+            curl_setopt($handle, CURLOPT_CONNECTTIMEOUT, $this->httpTimeout);
+            curl_setopt($handle, CURLOPT_LOW_SPEED_LIMIT, 10485760);
+            curl_setopt($handle, CURLOPT_LOW_SPEED_TIME, $this->httpTimeout);
             $response = curl_exec($handle);
-            curl_close($handle);
 
             if (false === $response) {
+                $curlError = curl_error($handle);
+                curl_close($handle);
+
                 throw new PHPUnit_Framework_Exception(
-                  'Could not connect to the Selenium RC server.'
+                  'Could not connect to the Selenium RC server: ' . $curlError
                 );
             }
+
+            curl_close($handle);
         }
         else
         {
