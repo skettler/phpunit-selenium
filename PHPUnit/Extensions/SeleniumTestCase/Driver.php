@@ -890,10 +890,10 @@ class PHPUnit_Extensions_SeleniumTestCase_Driver
             curl_setopt($handle, CURLOPT_POSTFIELDS, $parameters) ;
             curl_setopt($handle, CURLOPT_RETURNTRANSFER, true) ;
 
-            // This emulates the HTTP stream timeout: If download speed is below 
-            // 10 MByte/s for more than httpTimeout seconds, abort
+            // This emulates the HTTP stream timeout: If we do not
+            // receive anything for more than httpTimeout seconds, abort
             curl_setopt($handle, CURLOPT_CONNECTTIMEOUT, $this->httpTimeout);
-            curl_setopt($handle, CURLOPT_LOW_SPEED_LIMIT, 10485760);
+            curl_setopt($handle, CURLOPT_LOW_SPEED_LIMIT, 1);
             curl_setopt($handle, CURLOPT_LOW_SPEED_TIME, $this->httpTimeout);
             $response = curl_exec($handle);
 
